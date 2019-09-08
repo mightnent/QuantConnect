@@ -1,0 +1,44 @@
+class LiquidUniverseSelection(QCAlgorithm):
+    
+    #empty variable to use later
+    filteredByPrice = None
+    
+    def Initialize(self):
+        self.SetStartDate(2019, 1, 11)  
+        self.SetEndDate(2019, 7, 1) 
+        self.SetCash(100000) 
+
+        #init UniverseSelection 
+        self.AddUniverse(self.CoarseSelectionFilter)
+
+        #default is minutes. 
+        self.UniverseSettings.Resolution = Resolution.Daily
+
+        #1. Set the leverage to 2
+        self.UniverseSettings.Leverage = 2
+       
+    def CoarseSelectionFilter(self, coarse):
+        #need to understand that coarse is an array with DollarVolume,Price,Symbol fields.
+        sortedByDollarVolume = sorted(coarse, key=lambda c: c.DollarVolume, reverse=True)
+        #only take those if price>10, means will exclude penny stocks
+        #filterByPrice is an array
+        filteredByPrice = [c.Symbol for c in sortedByDollarVolume if c.Price > 10]
+        return filteredByPrice[:10] 
+
+    def OnSecuritiesChanged(self, changes):
+        #save changes to self.changes so we can access later
+        self.changes = changes
+        #creates a log for us to see
+        self.Log(f"OnSecuritiesChanged({self.Time}):: {changes}")
+        
+        #in the log, you can see removed or added. Following this logic:
+        #if removed from universe, you need to liquidate the stock holdings
+        for security in self.changes.RemovedSecurities:
+            if security.Invested:
+                self.Liquidate(security.Symbol)
+
+        #if added, then allocate some cash to it. But be sure to leave buffers.
+        for security in self.changes.AddedSecurities:
+            #2. Leave a cash buffer by setting the allocation to 0.18
+            #since leverage is 2, there will still be cash reserves
+            self.SetHoldings(security.Symbol,0.18)
